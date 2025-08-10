@@ -43,6 +43,11 @@ tiempo_play = 0
 DURACION_PLAY = 800
 jugador1_activo = True
 jugador2_activo = False
+jugador2_atacando = False
+ataque_frame = 0
+ultimo_cambio_frame = 0
+duracion_frame_ms = 150
+ataque_en_progreso = False
 #endregion
 
 #region Fuente y textos
@@ -88,9 +93,10 @@ def texto_final():
 menu_activo = True
 en_ejecucion = True
 estado_menu = "principal"  # puede ser 'principal', 'historia' o 'creditos'
-opciones_menu = ["Iniciar Juego", "Historia", "Créditos", "Salir"]
+modo_juego = "Un Jugador"
+opciones_menu = ["Un Jugador", "Multijugador", "Historia", "Créditos", "Salir"]
 opcion_actual = 0
-opciones_dificultad = ["Fácil", "Normal", "Difícil"]
+opciones_dificultad = ["Principiante", "Normal", "Leyenda", "Volver al Menú"]
 dificultad_actual = 0
 dificultad = "Normal"
 
@@ -126,11 +132,11 @@ def seleccionar_dificultad():
                 exit()
 
             if evento.type == pygame.KEYDOWN:
-               if evento.key == pygame.K_UP:
+               if evento.key in [pygame.K_UP, pygame.K_w]:
                 dificultad_actual = (dificultad_actual - 1) % len(opciones_dificultad)
-               elif evento.key == pygame.K_DOWN:
+               elif evento.key in [pygame.K_DOWN, pygame.K_s]:
                 dificultad_actual = (dificultad_actual + 1) % len(opciones_dificultad)
-               elif evento.key == pygame.K_RETURN:
+               elif evento.key in [pygame.K_RETURN, pygame.K_SPACE]:
                 dificultad = opciones_dificultad[dificultad_actual]
                 seleccionando = False  # salir de la selección
 
@@ -166,7 +172,7 @@ def mostrar_creditos():
 #endregion
 
 def mostrar_menu():
-    global estado_menu, opcion_actual, menu_activo
+    global estado_menu, opcion_actual, menu_activo, modo_juego
     menu_activo = True
     estado_menu = "principal"
     opcion_actual = 0
@@ -188,7 +194,13 @@ def mostrar_menu():
                         opcion_actual = (opcion_actual + 1) % len(opciones_menu)
                     elif evento.key in [pygame.K_RETURN, pygame.K_SPACE]:
                         seleccion = opciones_menu[opcion_actual]
-                        if seleccion == "Iniciar Juego":
+                        if seleccion == "Un Jugador":
+                            modo_juego = "Un Jugador"
+                            seleccionar_dificultad()
+                            musica_menu.stop()
+                            menu_activo = False
+                        elif seleccion == "Multijugador":
+                            modo_juego = "Multijugador"
                             seleccionar_dificultad()
                             musica_menu.stop()
                             menu_activo = False
@@ -209,6 +221,10 @@ def mostrar_menu():
             mostrar_historia()
         elif estado_menu == "creditos":
             mostrar_creditos()
+
+            # Fin de invulnerabilidad del jugador 2 tras 2 segundos
+            #if invulnerable_jugador2 and pygame.time.get_ticks() - tiempo_invulnerabilidad_jugador2 > 2000:
+                #invulnerable_jugador2 = False
 
         pygame.display.update()
 #endregion
@@ -245,9 +261,9 @@ sonido_dano = mixer.Sound("snd_hurt1.wav")
 sonido_dano.set_volume(0.6)
 sonido_pausa = mixer.Sound("snd_item.wav")
 sonido_pausa.set_volume(0.5)
-opciones_dificultad = ["Fácil", "Normal", "Difícil"]
-dificultad_actual = 0
-dificultad = "Normal"
+#opciones_dificultad = ["Principiante", "Normal", "Leyenda"]
+#dificultad_actual = 0
+#dificultad = "Normal"
 
 # Jugador 2 (corazón rojo)
 icono_jugador2 = pygame.image.load("RedHeart.png").convert_alpha()
@@ -256,7 +272,6 @@ jugador2_x = 400
 jugador2_y = 520
 jugador2_x_cambio = 0
 jugador2_y_cambio = 0
-salud_jugador2 = 20  # Barra de salud independiente
 jugador2_atacando = False
 tiempo_ultimo_ataque = 0
 indice_animacion_ataque = 0
@@ -275,19 +290,22 @@ for i in range(6):
         frame = sprite_sheet.subsurface((i * sprite_width, 0, sprite_width, sprite_height))
         ataque_sprites.append(pygame.transform.scale(frame, (48, 96)))  # Ajuste visual opcional
 
-jugador2_atacando = False
 ataque_frame = 0
-ataque_tiempo = 0
-DURACION_FRAME = 100  # ms por cuadro
-
+DURACION_ATAQUE_MS = 500        # duración total deseada del ataque (1 segundo)
+DURACION_FRAME = max(1, DURACION_ATAQUE_MS // max(1, len(ataque_sprites)))
+ATAQUE_FRAME_HIT = 2             # índice (0-based) del frame donde "golpea" (ajústalo)
+ataque_hit_done = False          # para que el golpe se aplique solo una vez por ataque
 
 def jugador(x, y):
-    pantalla.blit(icono_jugador, (x, y))
-    jugador2(jugador2_x, jugador2_y)
+    if jugador1_activo:
+        pantalla.blit(icono_jugador, (x, y))
+    elif jugador2_activo:
+        jugador2(jugador2_x, jugador2_y)
 
 def jugador2(x, y):
     if jugador2_atacando:
-        pantalla.blit(ataque_sprites[ataque_frame], (x - 6, y - 60))
+        idx = min(ataque_frame, len(ataque_sprites) - 1)
+        pantalla.blit(ataque_sprites[idx], (x - 6, y - 60))  # ajusta offset si lo necesitas
     else:
         pantalla.blit(icono_jugador2, (x, y))
 #endregion
@@ -296,6 +314,8 @@ def jugador2(x, y):
 balas = []
 
 def disparar_bala(x, y):
+    if jugador2_activo:
+        return
     for bala in balas:
         pantalla.blit(icono_bala, (bala["x"] + (ancho_heart // 2) - (icono_bala.get_width() // 2), bala["y"]))
 #endregion
@@ -333,6 +353,13 @@ def controla_enemigo(x, y, ene):
 #region Invulnerabilidad para el jugador cuando reciba daño
 def esta_invulnerable():
     return invulnerable and pygame.time.get_ticks() - tiempo_invulnerabilidad < duracion_invulnerabilidad
+if jugador2_activo:
+    if invulnerable_jugador2:
+        tiempo_actual = pygame.time.get_ticks()
+        if (tiempo_actual // 150) % 2 == 0:
+            jugador2(jugador2_x, jugador2_y)
+    else:
+        jugador2(jugador2_x, jugador2_y)
 #endregion
 
 #region Colisiones
@@ -342,41 +369,64 @@ def hay_colision(x1, y1, x2, y2):
 #endregion
 
 #region Bucle principal
-
 def jugar():
     global puntaje, salud, jugador_x, jugador_y, jugador2_x, jugador2_y, balas, enemigos_eliminados, record
     global nivel, enemigos_por_nivel
     global en_ejecucion, volver_a_menu, en_pausa, mostrar_play, tiempo_play
     global invulnerable, tiempo_invulnerabilidad
     global enemigo_x, enemigo_y, estado_explosion, enemigo_x_cambio, enemigo_y_cambio
-    global daño_enemigo, salud_maxima
+    global danio_enemigo, salud_maxima
     global jugador2_atacando, ataque_frame, ataque_tiempo
     global jugador1_activo, jugador2_activo
-    if dificultad == "Fácil":
-        daño_enemigo = 3
+    global salud2, salud2_maxima
+    global invulnerable_jugador2, tiempo_invulnerabilidad_jugador2
+    global ultimo_cambio_frame
+    if dificultad == "Principiante":
+        danio_enemigo = 3
     elif dificultad == "Normal":
-        daño_enemigo = 4
-    elif dificultad == "Difícil":
-        daño_enemigo = 5
+        danio_enemigo = 4
+    elif dificultad == "Leyenda":
+        danio_enemigo = 5
+    elif dificultad == "Volver al Menú":
+        mostrar_menu()
+
         print("Dificultad seleccionada:", dificultad)
+
         nivel = 1
         enemigos_por_nivel = 10
+
+        print("=== INICIANDO JUEGO ===")
+        print(f"jugador1_activo = {jugador1_activo}")
+        print(f"jugador2_activo = {jugador2_activo}")
+        print(f"salud = {salud}, salud_maxima = {salud_maxima}")
+        print(f"salud2 = {salud2}, salud2_maxima = {salud2_maxima}")
 
     en_ejecucion = True
     en_pausa = False
     mostrar_play = False
     tiempo_play = 0
-    volver_a_menu = False
 
     # Reiniciar variables importantes del jugador
-    puntaje = 0
+    jugador1_activo = True
+    jugador2_activo = False
+
     salud = salud_maxima
+    salud2 = salud2_maxima
     jugador_x = 368
     jugador_y = 520
-    balas.clear()
-    enemigos_eliminados = 0
+    jugador2_x = 400
+    jugador2_y = 520
     invulnerable = False
     tiempo_invulnerabilidad = 0
+    invulnerable_jugador2 = False
+    tiempo_invulnerabilidad_jugador2 = 0
+    ultimo_cambio_frame = 0
+
+    puntaje = 0
+    enemigos_eliminados = 0
+    balas.clear()
+
+    volver_a_menu = False
 
     # Reiniciar enemigos (posiciones y estados)
     for i in range(cantidad_enemigos):
@@ -399,22 +449,59 @@ def jugar():
 
             if evento.type == pygame.KEYDOWN:
                 # Disparo de Corazón Amarillo (Jugador 1)
-                if evento.key == pygame.K_SPACE and not en_pausa:
-                    balas.append({"x": jugador_x, "y": jugador_y, "velocidad": -7.5})
-                    sonido_disparo.play()
+                if not en_pausa:
+                    if jugador1_activo and evento.key == pygame.K_SPACE:
+                        balas.append({"x": jugador_x, "y": jugador_y, "velocidad": -7.5})
+                        sonido_disparo.play()
+
+                    elif jugador2_activo and evento.key == pygame.K_RETURN:
+                        if not jugador2_atacando:
+                            jugador2_atacando = True
+                            ataque_frame = 0
+                            ataque_tiempo = pygame.time.get_ticks()
+                            ataque_hit_done = False
+                            sonido_disparo.play()
+
+                        # Hacer invulnerable por 2 segundos
+                        invulnerable_jugador2 = True
+                        tiempo_invulnerabilidad_jugador2 = pygame.time.get_ticks()
+                        ataque_frame = 0
+                        ataque_tiempo = pygame.time.get_ticks()
+                        sonido_disparo.play()
+
+                        if jugador2_activo and not invulnerable_jugador2 and hay_colision(enemigo_x[i], enemigo_y[i],
+                                                                                          jugador2_x, jugador2_y):
+                            salud2 -= danio_enemigo
+                            enemigo_y[i] = random.randint(0, 150)
+                            invulnerable_jugador2 = True
+                            tiempo_invulnerabilidad_jugador2 = pygame.time.get_ticks()
+                            sonido_dano.play()
+
+                if jugador2_activo and jugador2_atacando:
+                    for i in range(cantidad_enemigos):
+                        if not estado_explosion[i]:
+                            if hay_colision(enemigo_x[i], enemigo_y[i], jugador2_x, jugador2_y):
+                                sonido_muerte.play()
+                                estado_explosion[i] = True
+                                enemigo_y[i] = 1000
+                                puntaje += 1
+                                enemigos_eliminados += 1
 
                 # Ataque de Corazón Rojo (Jugador 2)
-                if evento.key == pygame.K_RETURN and not en_pausa:
+                if evento.key == pygame.K_RETURN and not jugador2_atacando and not ataque_en_progreso:
                     jugador2_atacando = True
-                    indice_animacion_ataque = 0
-                    tiempo_ultimo_ataque = pygame.time.get_ticks()
+                    ataque_en_progreso = True
+                    ataque_frame = 0
+                    ataque_tiempo = pygame.time.get_ticks()
+
                     sonido_disparo.play()
 
-                if evento.type == pygame.KEYDOWN:
-                    if evento.key == pygame.K_f and not jugador2_atacando:
+                if evento.type == pygame.KEYDOWN and jugador2_activo and evento.key == pygame.K_RETURN:
+                    if not jugador2_atacando:
                         jugador2_atacando = True
                         ataque_frame = 0
                         ataque_tiempo = pygame.time.get_ticks()
+                        sonido_disparo.play()
 
         # Nota: Con esto, se puede controlar el movimiento continuamente con teclas presionadas
         teclas = pygame.key.get_pressed()
@@ -445,9 +532,13 @@ def jugar():
 
         if not en_pausa:
             # Movimiento jugador
-            jugador_x += jugador_x_cambio
-            jugador_y += jugador_y_cambio
-            borde = 10
+            if jugador1_activo:
+                jugador_x += jugador_x_cambio
+                jugador_y += jugador_y_cambio
+                borde = 10
+            elif jugador2_activo:
+                jugador2_x += jugador2_x_cambio
+                jugador2_y += jugador2_y_cambio
             ancho_jugador = icono_jugador.get_width()
             alto_jugador = icono_jugador.get_height()
             jugador_x = max(borde, min(jugador_x, 800 - borde - icono_jugador.get_width()))
@@ -459,13 +550,29 @@ def jugar():
             jugador2_y = max(borde, min(jugador2_y, 600 - borde - icono_jugador2.get_height()))
 
             if jugador2_atacando:
-                tiempo_actual = pygame.time.get_ticks()
-                if tiempo_actual - ataque_tiempo > DURACION_FRAME:
-                    ataque_tiempo = tiempo_actual
+                ahora = pygame.time.get_ticks()
+                if ahora - ultimo_cambio_frame >= DURACION_FRAME:
                     ataque_frame += 1
+                    ultimo_cambio_frame = ahora
+
+                    if ataque_frame == ATAQUE_FRAME_HIT and not ataque_hit_done:
+                        # Aplicar daño a enemigos en este frame
+                        for i in range(cantidad_enemigos):
+                            if not estado_explosion[i]:
+                                if hay_colision(enemigo_x[i], enemigo_y[i], jugador2_x, jugador2_y):
+                                    sonido_muerte.play()
+                                    estado_explosion[i] = True
+                                    enemigo_y[i] = 1000
+                                    puntaje += 1
+                                    enemigos_eliminados += 1
+                        ataque_hit_done = True
+
                     if ataque_frame >= len(ataque_sprites):
-                        ataque_frame = 0
                         jugador2_atacando = False
+                        ataque_frame = 0
+                        ataque_hit_done = False
+                        ataque_en_progreso = False
+
 
             # Movimiento balas
             for bala in balas[:]:
@@ -497,15 +604,21 @@ def jugar():
                     if enemigo_y[i] <= borde or enemigo_y[i] >= 600 - borde - enemigo_alto:
                         enemigo_y_cambio[i] *= -1
 
-                    if not esta_invulnerable() and hay_colision(enemigo_x[i], enemigo_y[i], jugador_x, jugador_y):
-                        if jugador1_activo:
-                            mostrar_barra_salud(30, 70, salud, salud_maxima)
-                        else:
-                            mostrar_barra_salud(30, 70, salud2, salud2_maxima)
-                        enemigo_y[i] = random.randint(0, 150)
-                        invulnerable = True
-                        tiempo_invulnerabilidad = pygame.time.get_ticks()
-                        sonido_dano.play()
+                    if not esta_invulnerable():
+                        if jugador1_activo and hay_colision(enemigo_x[i], enemigo_y[i], jugador_x, jugador_y):
+                            salud -= danio_enemigo
+                            enemigo_y[i] = random.randint(0, 150)
+                            invulnerable = True
+                            tiempo_invulnerabilidad = pygame.time.get_ticks()
+                            sonido_dano.play()
+
+
+                        elif jugador2_activo and not invulnerable_jugador2 and hay_colision(enemigo_x[i], enemigo_y[i], jugador2_x, jugador2_y):
+                            salud2 -= danio_enemigo
+                            enemigo_y[i] = random.randint(0, 150)
+                            invulnerable = True
+                            tiempo_invulnerabilidad = pygame.time.get_ticks()
+                            sonido_dano.play()
 
                     for bala in balas:
                         if hay_colision(enemigo_x[i], enemigo_y[i], bala["x"], bala["y"]):
@@ -525,8 +638,7 @@ def jugar():
                                     musica.stop()
                                     sonido_felicitacion.play()
 
-                                    texto_victoria = fuente_final.render("¡Has completado el juego!", True,
-                                                                         (255, 255, 0))
+                                    texto_victoria = fuente_final.render("¡Has completado el juego!",True,(255, 255, 0))
                                     pantalla.blit(texto_victoria, ((800 - texto_victoria.get_width()) // 2, 250))
                                     pygame.display.update()
                                     pygame.time.wait(2500)
@@ -535,11 +647,13 @@ def jugar():
                                     esperando_respuesta = True
                                     while esperando_respuesta:
                                         pantalla.fill((0, 0, 0))
+                                        mensaje0 = fuente.render(f"Puntaje: {puntaje}", True, (255,255,255))
                                         mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
                                         mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
                                         mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
                                         mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
 
+                                        pantalla.blit(mensaje0, ((800 - mensaje0.get_width()) // 2, 210))
                                         pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
                                         pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
                                         pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
@@ -621,102 +735,190 @@ def jugar():
                                     print("Nivel 3 alcanzado - se activará el jefe (pendiente de implementar)")
 
             # Verificar si terminó el juego
-            if salud <= 0:
-                # Revisar si jugador 1 muere
+            if modo_juego == "Un Jugador":
                 if jugador1_activo and salud <= 0:
+                    print("Jugador 1 ha muerto.")
+                    musica.stop()
+                    if puntaje > record:
+                        sonido_felicitacion.play()
+                        record = puntaje
+                    elif puntaje == record:
+                        sonido_victoria_equivocada.play()
+                    else:
+                        sonido_derrota.play()
+
+                    for bala in balas:
+                        disparar_bala(bala["x"], bala["y"])
+
+                    for i in range(cantidad_enemigos):
+                        if not estado_explosion[i]:
+                            controla_enemigo(enemigo_x[i], enemigo_y[i], i)
+
+                    if esta_invulnerable():
+                        tiempo_actual = pygame.time.get_ticks()
+                        if (tiempo_actual // 150) % 2 == 0:
+                            jugador(jugador_x, jugador_y)
+                    else:
+                        jugador(jugador_x, jugador_y)
+
+                    texto_final()
+                    pygame.display.update()
+                    pygame.time.wait(2000)
+
+                    esperando_respuesta = True
+                    while esperando_respuesta:
+                        pantalla.fill((0, 0, 0))
+                        mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
+                        mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
+                        mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
+                        mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
+
+                        pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
+                        pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
+                        pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
+                        pantalla.blit(mensaje4, ((800 - mensaje4.get_width()) // 2, 370))
+
+                        pygame.display.update()
+
+                        for evento in pygame.event.get():
+                            if evento.type == pygame.QUIT:
+                                esperando_respuesta = False
+                                en_ejecucion = False
+
+                            if evento.type == pygame.KEYDOWN:
+                                if evento.key == pygame.K_y:
+                                    # Reintentar
+                                    puntaje = 0
+                                    salud = salud_maxima
+                                    jugador_x = 368
+                                    jugador_y = 520
+                                    balas.clear()
+                                    enemigos_eliminados = 0
+                                    for i in range(cantidad_enemigos):
+                                        enemigo_x[i] = random.randint(0, 736)
+                                        enemigo_y[i] = random.randint(0, 200)
+                                        estado_explosion[i] = False
+                                    musica.play(loops=-1)
+                                    esperando_respuesta = False
+
+                                elif evento.key == pygame.K_m:
+                                    # Volver al menú
+                                    musica.stop()
+                                    musica_menu.play(loops=-1)
+                                    esperando_respuesta = False
+                                    en_ejecucion = False
+                                    volver_a_menu = True
+
+                                elif evento.key == pygame.K_n:
+                                    # Salir del juego
+                                    esperando_respuesta = False
+                                    en_ejecucion = False
+            elif modo_juego == "Multijugador":
+                if jugador1_activo and salud <= 0:
+                    print("Jugador 1 ha muerto. Activando Jugador 2...")
                     jugador1_activo = False
                     jugador2_activo = True
-                    salud = 0  # por si quedó negativo
-
-                    # Cambiar sprite, posición, y reiniciar variables si lo deseas
-                    print("Jugador 1 ha muerto. Turno del Jugador 2.")
-
-                    jugador_x = jugador2_x
-                    jugador_y = jugador2_y
-
+                    salud2 = salud2_maxima
+                    jugador2_x, jugador2_y = 400, 500
+                    balas.clear()
+                    pygame.time.wait(1500)
                     continue
 
-                    # Revisar si jugador 2 muere
-                    if jugador2_activo and salud2 <= 0:
-                        jugador2_activo = False
-                        salud2 = 0
-                        print("Jugador 2 ha muerto. Fin del juego.")
+                elif jugador2_activo and salud2 <= 0:
+                    print("Jugador 2 ha muerto. Fin del juego.")
+                    jugador2_activo = False
+                    en_ejecucion = False
+                    volver_a_menu = True
+                    continue  # Esto previene que el resto del bucle se ejecute
 
-                musica.stop()
-                if puntaje > record:
-                    sonido_felicitacion.play()
-                    record = puntaje
-                elif puntaje == record:
-                    sonido_victoria_equivocada.play()
-                else:
-                    sonido_derrota.play()
+                    if jugador1_activo:
+                        jugador1_activo = False
+                        jugador2_activo = True
+                        jugador2_x, jugador2_y = 400, 500
+                        balas.clear()
+                        pygame.time.wait(1500)  # Pequeña pausa para el cambio de turno
+                        continue
+                    elif jugador2_activo:
+                            jugador2_activo = False
+                            en_ejecucion = False  # Ambos jugadores muertos → fin del juego
+                            volver_a_menu = True
 
-                for bala in balas:
-                    disparar_bala(bala["x"], bala["y"])
+                    musica.stop()
+                    if puntaje > record:
+                        sonido_felicitacion.play()
+                        record = puntaje
+                    elif puntaje == record:
+                        sonido_victoria_equivocada.play()
+                    else:
+                        sonido_derrota.play()
 
-                for i in range(cantidad_enemigos):
-                    if not estado_explosion[i]:
-                        controla_enemigo(enemigo_x[i], enemigo_y[i], i)
+                    for bala in balas:
+                        disparar_bala(bala["x"], bala["y"])
 
-                if esta_invulnerable():
-                    tiempo_actual = pygame.time.get_ticks()
-                    if (tiempo_actual // 150) % 2 == 0:
+                    for i in range(cantidad_enemigos):
+                        if not estado_explosion[i]:
+                            controla_enemigo(enemigo_x[i], enemigo_y[i], i)
+
+                    if esta_invulnerable():
+                        tiempo_actual = pygame.time.get_ticks()
+                        if (tiempo_actual // 150) % 2 == 0:
+                            jugador(jugador_x, jugador_y)
+                    else:
                         jugador(jugador_x, jugador_y)
-                else:
-                    jugador(jugador_x, jugador_y)
 
-                texto_final()
-                pygame.display.update()
-                pygame.time.wait(2000)
-
-                esperando_respuesta = True
-                while esperando_respuesta:
-                    pantalla.fill((0, 0, 0))
-                    mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
-                    mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
-                    mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
-                    mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
-
-                    pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
-                    pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
-                    pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
-                    pantalla.blit(mensaje4, ((800 - mensaje4.get_width()) // 2, 370))
-
+                    texto_final()
                     pygame.display.update()
+                    pygame.time.wait(2000)
 
-                    for evento in pygame.event.get():
-                        if evento.type == pygame.QUIT:
-                            esperando_respuesta = False
-                            en_ejecucion = False
+                    esperando_respuesta = True
+                    while esperando_respuesta:
+                        pantalla.fill((0, 0, 0))
+                        mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
+                        mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
+                        mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
+                        mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
 
-                        if evento.type == pygame.KEYDOWN:
-                            if evento.key == pygame.K_y:
-                                # Reintentar
-                                puntaje = 0
-                                salud = salud_maxima
-                                jugador_x = 368
-                                jugador_y = 520
-                                balas.clear()
-                                enemigos_eliminados = 0
-                                for i in range(cantidad_enemigos):
-                                    enemigo_x[i] = random.randint(0, 736)
-                                    enemigo_y[i] = random.randint(0, 200)
-                                    estado_explosion[i] = False
-                                musica.play(loops=-1)
-                                esperando_respuesta = False
+                        pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
+                        pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
+                        pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
+                        pantalla.blit(mensaje4, ((800 - mensaje4.get_width()) // 2, 370))
 
-                            elif evento.key == pygame.K_m:
-                                # Volver al menú
-                                musica.stop()
-                                musica_menu.play(loops=-1)
+                        pygame.display.update()
+
+                        for evento in pygame.event.get():
+                            if evento.type == pygame.QUIT:
                                 esperando_respuesta = False
                                 en_ejecucion = False
-                                volver_a_menu = True
 
-                            elif evento.key == pygame.K_n:
-                                # Salir del juego
-                                esperando_respuesta = False
-                                en_ejecucion = False
+                            if evento.type == pygame.KEYDOWN:
+                                if evento.key == pygame.K_y:
+                                    # Reintentar
+                                    puntaje = 0
+                                    salud = salud_maxima
+                                    jugador_x = 368
+                                    jugador_y = 520
+                                    balas.clear()
+                                    enemigos_eliminados = 0
+                                    for i in range(cantidad_enemigos):
+                                        enemigo_x[i] = random.randint(0, 736)
+                                        enemigo_y[i] = random.randint(0, 200)
+                                        estado_explosion[i] = False
+                                    musica.play(loops=-1)
+                                    esperando_respuesta = False
+
+                                elif evento.key == pygame.K_m:
+                                    # Volver al menú
+                                    musica.stop()
+                                    musica_menu.play(loops=-1)
+                                    esperando_respuesta = False
+                                    en_ejecucion = False
+                                    volver_a_menu = True
+
+                                elif evento.key == pygame.K_n:
+                                    # Salir del juego
+                                    esperando_respuesta = False
+                                    en_ejecucion = False
+
 
         # Mostrar siempre: jugador, enemigos, balas
         if esta_invulnerable():
@@ -735,7 +937,10 @@ def jugar():
         # Si bien no hay un fondo, hay bordes blancos para que haga entender al jugador que hay una especie de zona de combate
         margen_borde = 30
         mostrar_puntaje(margen_borde, margen_borde)
-        mostrar_barra_salud(margen_borde, margen_borde + 40, salud, salud_maxima)
+        if jugador1_activo:
+            mostrar_barra_salud(margen_borde, margen_borde + 40, salud, salud_maxima)
+        else:
+            mostrar_barra_salud(margen_borde, margen_borde + 40, salud2, salud2_maxima)
         mostrar_nivel(margen_borde, margen_borde + 80, nivel)
 
 
