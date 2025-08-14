@@ -4,9 +4,10 @@ import math
 from pygame import mixer
 #endregion
 
-# Inicialización
+#region Inicialización
 pygame.init()
 mixer.init()
+#endregion
 
 #region Pantalla y fondo
 pantalla = pygame.display.set_mode((800, 600))
@@ -17,8 +18,9 @@ pygame.display.set_icon(icono_ventana)
 #Fondo negro
 fondo = pygame.Surface((800, 600))
 fondo.fill((0, 0, 0))
+#endregion
 
-# Música
+#region Música
 mixer.init()
 musica_menu = mixer.Sound("Start-Menu.mp3")
 musica = mixer.Sound("Anticipation.mp3")
@@ -27,6 +29,8 @@ musica_menu.play(loops=-1) #Bucle infinito
 #endregion
 
 #region Variables globales
+nombre_j1 = ""
+nombre_j2 = ""
 puntaje_j1 = 0
 puntaje_j2 = 0
 salud = 20
@@ -61,10 +65,11 @@ fuente = pygame.font.Font("PressStart2P-Regular.ttf", 16)
 fuente_final = pygame.font.Font("PressStart2P-Regular.ttf", 20)
 
 def mostrar_puntaje(x, y):
-    texto_j1 = fuente.render(f"P1: {puntaje_j1}  Rec: {record_j1}", True, (255,255,255))
-    texto_j2 = fuente.render(f"P2: {puntaje_j2}  Rec: {record_j2}", True, (255,255,255))
+    texto_j1 = fuente.render(f"{nombre_j1}: {puntaje_j1}  Rec: {record_j1}", True, (255, 255, 255))
     pantalla.blit(texto_j1, (x, y))
-    pantalla.blit(texto_j2, (x, y + 20))
+    if modo_juego == "Multijugador":
+        texto_j2 = fuente.render(f"{nombre_j2}: {puntaje_j2}  Rec: {record_j2}", True, (255, 255, 255))
+        pantalla.blit(texto_j2, (x, y + 20))
 
 def mostrar_barra_salud(x, y, salud_actual, salud_maxima):
     ancho_unitario = 3  # Ajusta el valor si la barra se vuelve muy grande
@@ -106,13 +111,15 @@ def comprobar_subida_nivel():
             esperando_respuesta = True
             while esperando_respuesta:
                 pantalla.fill((0, 0, 0))
-                mensaje0 = fuente.render(f"Jugador 1: {puntaje_j1}  Jugador 2: {puntaje_j2}", True, (255,255,255))
+                puntaje1 = fuente.render(f"{nombre_j1}: {puntaje_j1} punto(s)", True, (255, 255, 255))
+                puntaje2 = fuente.render(f"{nombre_j2}: {puntaje_j2} punto(s)", True, (255, 255, 255))
                 mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
                 mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
                 mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
                 mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
 
-                pantalla.blit(mensaje0, ((800 - mensaje0.get_width()) // 2, 210))
+                pantalla.blit(puntaje1, ((800 - puntaje1.get_width()) // 2, 170))
+                pantalla.blit(puntaje2, ((800 - puntaje2.get_width()) // 2, 210))
                 pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
                 pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
                 pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
@@ -267,6 +274,45 @@ def seleccionar_dificultad():
                 dificultad = opciones_dificultad[dificultad_actual]
                 seleccionando = False  # salir de la selección
 
+def ingresar_nombre_jugador(jugador_numero=1):
+    global nombre_j1, nombre_j2
+    nombre = ""
+    max_caracteres = 10
+    escribiendo = True
+
+    while escribiendo:
+        pantalla.fill((0, 0, 0))
+
+        # Texto principal
+        titulo = fuente.render(f"Jugador {jugador_numero}, ingresa tu nombre:", True, (255, 255, 255))
+        pantalla.blit(titulo, ((800 - titulo.get_width()) // 2, 200))
+
+        # Mostrar lo que lleva escrito
+        texto_nombre = fuente.render(nombre, True, (255, 255, 0))
+        pantalla.blit(texto_nombre, ((800 - texto_nombre.get_width()) // 2, 300))
+
+        pygame.display.update()
+
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_RETURN and nombre != "":
+                    escribiendo = False
+                elif evento.key == pygame.K_BACKSPACE:
+                    nombre = nombre[:-1]
+                else:
+                    if len(nombre) < max_caracteres and evento.unicode.isprintable():
+                        nombre += evento.unicode
+
+    # Guardar en variable global según jugador
+    if jugador_numero == 1:
+        nombre_j1 = nombre
+    else:
+        nombre_j2 = nombre
+
 def mostrar_historia():
     pantalla.fill((0, 0, 0))
     historia = [
@@ -328,6 +374,7 @@ def mostrar_menu():
                             salud_maxima = 20
                             salud2_maxima = 20
                             seleccionar_dificultad()
+                            ingresar_nombre_jugador(1)
                             musica_menu.stop()
                             menu_activo = False
                         elif seleccion == "Multijugador":
@@ -336,6 +383,8 @@ def mostrar_menu():
                             salud_maxima = 20
                             salud2_maxima = 20
                             seleccionar_dificultad()
+                            ingresar_nombre_jugador(1)
+                            ingresar_nombre_jugador(2)
                             musica_menu.stop()
                             menu_activo = False
                         elif seleccion == "Historia":
@@ -859,18 +908,20 @@ def jugar():
                     else:
                         jugador(jugador_x, jugador_y)
 
-                    texto_final()
+                    #texto_final()
                     pygame.display.update()
                     pygame.time.wait(2000)
 
                     esperando_respuesta = True
                     while esperando_respuesta:
                         pantalla.fill((0, 0, 0))
+                        puntaje1 = fuente.render(f"{nombre_j1}: {puntaje_j1} punto(s)", True, (255, 255, 255))
                         mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
                         mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
                         mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
                         mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
 
+                        pantalla.blit(puntaje1, ((800 - puntaje1.get_width()) // 2, 210))
                         pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
                         pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
                         pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
@@ -965,18 +1016,22 @@ def jugar():
                     else:
                         jugador(jugador_x, jugador_y)
 
-                    texto_final()
+                    #texto_final()
                     pygame.display.update()
                     pygame.time.wait(2000)
 
                     esperando_respuesta = True
                     while esperando_respuesta:
                         pantalla.fill((0, 0, 0))
+                        puntaje1 = fuente.render(f"{nombre_j1}: {puntaje_j1} punto(s)", True, (255, 255, 255))
+                        puntaje2 = fuente.render(f"{nombre_j2}: {puntaje_j2} punto(s)", True, (255, 255, 255))
                         mensaje1 = fuente.render("¿Qué deseas hacer?", True, (255, 255, 255))
                         mensaje2 = fuente.render("Y = Reintentar", True, (255, 255, 255))
                         mensaje3 = fuente.render("M = Menú Principal", True, (255, 255, 255))
                         mensaje4 = fuente.render("N = Salir", True, (255, 255, 255))
 
+                        pantalla.blit(puntaje1, ((800 - puntaje1.get_width()) // 2, 170))
+                        pantalla.blit(puntaje2, ((800 - puntaje2.get_width()) // 2, 210))
                         pantalla.blit(mensaje1, ((800 - mensaje1.get_width()) // 2, 250))
                         pantalla.blit(mensaje2, ((800 - mensaje2.get_width()) // 2, 290))
                         pantalla.blit(mensaje3, ((800 - mensaje3.get_width()) // 2, 330))
