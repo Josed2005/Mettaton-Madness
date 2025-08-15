@@ -1031,7 +1031,7 @@ def jugar():
                                 elif evento.key == pygame.K_e:
                                     mostrar_estadisticas()  # NUEVO
 
-                    break  # salir del loop de esta partida
+                    continue  # salir del loop de esta partida
 
             elif modo_juego == "Multijugador":
                 if jugador1_activo and salud <= 0:
@@ -1115,7 +1115,7 @@ def jugar():
                                 elif evento.key == pygame.K_e:
                                     mostrar_estadisticas()  # NUEVO
 
-                    break  # salir del loop de esta partida
+                    continue  # salir del loop de esta partida
 
         # Dibujo base
         if jugador1_activo:
