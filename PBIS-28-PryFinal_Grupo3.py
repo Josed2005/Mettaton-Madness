@@ -62,7 +62,7 @@ volver_a_menu = False  # para el bucle principal
 en_ejecucion = True
 estado_menu = "principal"
 modo_juego = "Un Jugador"
-opciones_menu = ["Un Jugador", "Multijugador", "Historia", "Créditos", "Salir"]
+opciones_menu = ["Un Jugador", "Multijugador", "Historia", "Consejos", "Créditos", "Salir"]
 opcion_actual = 0
 opciones_dificultad = ["Principiante", "Normal", "Leyenda", "Volver al Menú"]
 dificultad_actual = 0
@@ -244,14 +244,21 @@ def resetear_partida_interna():
 
 #region Menú principal (funciones del menú)
 def mostrar_menu_pantalla():
-    pantalla.fill((0, 0, 0))
-    titulo = fuente.render("Mettaton Madness: Rebooted", True, (255, 255, 255))
-    pantalla.blit(titulo, ((800 - titulo.get_width()) // 2, 80))
+    # Cargar y escalar la imagen al tamaño de la pantalla
+    fondo_menu = pygame.image.load("image.png").convert()
+    fondo_menu = pygame.transform.scale(fondo_menu, (800, 600))
+    pantalla.blit(fondo_menu, (0, 0))
 
+    # Dibujar título
+    #titulo = fuente.render("Mettaton Madness: Rebooted", True, (255, 255, 255))
+    #pantalla.blit(titulo, ((800 - titulo.get_width()) // 2, 80))
+
+    # Dibujar opciones del menú centradas
     for i, texto in enumerate(opciones_menu):
         color = (255, 255, 255) if i == opcion_actual else (180, 180, 180)
         render = fuente.render(texto, True, color)
-        pantalla.blit(render, ((800 - render.get_width()) // 2, 180 + i * 40))
+        pantalla.blit(render, ((800 - render.get_width()) // 2 + 20, 180 + i * 40))
+
 
 def seleccionar_dificultad():
     global dificultad, dificultad_actual
@@ -333,6 +340,32 @@ def mostrar_historia():
         render = fuente.render(linea, True, (255, 255, 255))
         pantalla.blit(render, (60, 80 + i * 35))
 
+def mostrar_consejos():
+    pantalla.fill((0, 0, 0))
+    consejos = [
+        "⭐ Consejos para jugar ⭐",
+        "",
+        "- Mantente en movimiento",
+        "  para esquivar ataques.",
+        "- Usa el disparo constantemente",
+        "  para defenderte.",
+        "- Coopera bien en multijugador.",
+        "- Los enemigos se vuelven más",
+        "  rápidos con el tiempo.",
+        "- Aprovecha los objetos de poder",
+        "  cuando aparezcan.",
+        "",
+        "Presiona ESC para volver al menú"
+    ]
+
+    for i, linea in enumerate(consejos):
+        render = fuente.render(linea, True, (255, 255, 255))
+        pantalla.blit(render, (40, 50 + i * 30))  # reducimos el espacio entre líneas para que quepa mejor
+
+
+
+
+
 def mostrar_creditos():
     pantalla.fill((0, 0, 0))
     creditos = [
@@ -395,6 +428,8 @@ def mostrar_menu():
                             menu_activo = False
                         elif seleccion == "Historia":
                             estado_menu = "historia"
+                        elif seleccion == "Consejos":
+                            estado_menu = "consejos"
                         elif seleccion == "Créditos":
                             estado_menu = "creditos"
                         elif seleccion == "Salir":
@@ -408,8 +443,11 @@ def mostrar_menu():
             mostrar_menu_pantalla()
         elif estado_menu == "historia":
             mostrar_historia()
+        elif estado_menu == "consejos":
+            mostrar_consejos()
         elif estado_menu == "creditos":
             mostrar_creditos()
+
 
         pygame.display.update()
 #endregion
